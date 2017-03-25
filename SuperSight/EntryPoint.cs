@@ -1,10 +1,8 @@
-﻿#define LSPDFR
-
-using Rage;
-
-namespace SuperSight
+﻿namespace SuperSight
 {
     using System;
+
+    using Rage;
 
 #if NO_LSPDFR
 

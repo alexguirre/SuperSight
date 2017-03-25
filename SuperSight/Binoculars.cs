@@ -1,6 +1,6 @@
 ﻿namespace SuperSight
 {
-    internal class Binoculars : ISight
-    {
-    }
+    //internal class Binoculars : ISight
+    //{
+    //}
 }

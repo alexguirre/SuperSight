@@ -1,6 +1,9 @@
 ﻿namespace SuperSight
 {
     using System;
+    using System.Linq;
+    using System.Reflection;
+    using System.Collections.Generic;
 
     using Rage;
 
@@ -26,11 +29,13 @@
         public bool IsInitialized { get; private set; }
         public GameFiber Fiber { get; private set; }
 
+        public List<ISight> Sights { get; private set; } = new List<ISight>();
+
         public event CleanUpEventHandler CleanUp;
 
         private PluginController()
         {
-            Fiber = new GameFiber(UpdateLoop, "Helicopter Camera - PluginController::UpdateLoop Fiber");
+            Fiber = new GameFiber(UpdateLoop, "SuperSight - PluginController::UpdateLoop Fiber");
         }
 
         public void Init()
@@ -39,6 +44,8 @@
             {
                 throw new InvalidOperationException($"{nameof(PluginController)} is already initialized, can't call {nameof(Init)} again.");
             }
+
+            RegisterSights();
 
             Fiber.Start();
 
@@ -84,7 +91,42 @@
 
         private void Update()
         {
-            
+            for (int i = 0; i < Sights.Count; i++)
+            {
+                ISight s = Sights[i];
+
+                if (s.IsActive)
+                {
+                    s.OnActiveUpdate();
+
+                    if (s.MustBeDeactivated)
+                    {
+                        s.IsActive = false;
+                    }
+                }
+                else
+                {
+                    if (s.MustBeActivated)
+                    {
+                        s.IsActive = true;
+                    }
+                }
+            }
+        }
+
+        // creates an instance of every class that inherits from ISight contained in this assembly and adds it to the Sights list
+        private void RegisterSights()
+        {
+            Sights.Clear();
+
+            IEnumerable<Type> types = Assembly.GetExecutingAssembly().GetTypes().Where(t => !t.IsAbstract && !t.IsInterface && typeof(ISight).IsAssignableFrom(t));
+
+            foreach (Type type in types)
+            {
+                ISight s = (ISight)Activator.CreateInstance(type);
+
+                Sights.Add(s);
+            }
         }
     }
 }
