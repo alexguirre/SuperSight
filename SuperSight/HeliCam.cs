@@ -1,6 +1,8 @@
 ﻿namespace SuperSight
 {
+    using System.IO;
     using System.Windows.Forms;
+    using System.Collections.Generic;
 
     using Rage;
     using Rage.Native;
@@ -9,9 +11,9 @@
 
     internal class HeliCam : ISight
     {
-        // TODO: add settings
-        public const Keys ToggleCameraKey = Keys.U, ToggleNightVisionKey = Keys.NumPad9, ToggleThermalVisionKey = Keys.NumPad7;
-
+        public Keys ToggleCameraKey { get; }
+        public Keys ToggleNightVisionKey { get; }
+        public Keys ToggleThermalVisionKey { get; }
 
         private bool isActive;
         public bool IsActive
@@ -68,11 +70,18 @@
         private Scaleform hudScaleform;
         private Sound backgroundSound, turnSound, zoomSound, searchLoopSound, searchSuccessSound;
 
+        public HeliCam()
+        {
+            ToggleCameraKey = Plugin.Settings.IniFile.ReadEnum<Keys>("Heli Cam Settings", "ToggleCameraKey", Keys.U);
+            ToggleNightVisionKey = Plugin.Settings.IniFile.ReadEnum<Keys>("Heli Cam Settings", "ToggleNightVisionKey", Keys.NumPad9);
+            ToggleThermalVisionKey = Plugin.Settings.IniFile.ReadEnum<Keys>("Heli Cam Settings", "ToggleThermalVisionKey", Keys.NumPad7);
+        }
+
         public void OnActivate()
         {
             camera = new Camera(true);
             camera.SetRotationYaw(Game.LocalPlayer.Character.CurrentVehicle.Heading);
-            camera.AttachToEntity(Game.LocalPlayer.Character.CurrentVehicle, GetCameraPositionOffsetForModel(Game.LocalPlayer.Character.CurrentVehicle.Model), true);
+            camera.AttachToEntity(Game.LocalPlayer.Character.CurrentVehicle, HeliCamOffsetsDictionary.Instance[Game.LocalPlayer.Character.CurrentVehicle.Model], true);
 
             hudScaleform = new Scaleform();
             hudScaleform.Load("heli_cam");
@@ -94,6 +103,11 @@
         }
 
         public void OnDeactivate()
+        {
+            Dispose();
+        }
+
+        public void Dispose()
         {
             NativeFunction.Natives.SetNoiseoveride(false);
             NativeFunction.Natives.SetNoisinessoveride(0.0f);
@@ -268,34 +282,133 @@
             }
         }
 
-        private static Vector3 GetCameraPositionOffsetForModel(Model model)
+        private sealed class HeliCamOffsetsDictionary
         {
-            if (model == new Model("valkyrie") || model == new Model("valkyrie2"))
-                return new Vector3(0.0f, 3.615f, -1.15f);
-            else if (model == new Model("polmav"))
-                return new Vector3(0.0f, 2.75f, -1.25f);
-            else if (model == new Model("maverick"))
-                return new Vector3(0.0f, 3.5f, -0.9225f);
-            else if (model == new Model("savage"))
-                return new Vector3(0.0f, 5.475f, -0.84115f);
-            else if (model == new Model("buzzard") || model == new Model("buzzard2"))
-                return new Vector3(0.0f, 1.958f, -0.75f);
-            else if (model == new Model("cargobob") || model == new Model("cargobob3") || model == new Model("cargobob4"))
-                return new Vector3(-0.58225f, 7.15f, -0.95f);
-            else if (model == new Model("cargobob2"))
-                return new Vector3(0.0f, 6.9625f, -1.0f);
-            else if (model == new Model("frogger") || model == new Model("frogger2"))
-                return new Vector3(0.0f, 3.25f, -0.5975f);
-            else if (model == new Model("annihilator"))
-                return new Vector3(-0.5715f, 4.0f, -0.686875f);
-            else if (model == new Model("skylift"))
-                return new Vector3(0.0f, 4.8385f, -2.275f);
-            else if (model == new Model("swift") || model == new Model("swift2"))
-                return new Vector3(0.0f, 4.765f, -0.6f);
-            else if (model == new Model("supervolito") || model == new Model("supervolito2"))
-                return new Vector3(0.0f, 3.145f, -0.9675f);
-            else
-                return new Vector3(0.0f, 2.75f, -1.25f);
+            private static readonly Vector3 DefaultOffset = new Vector3(0.0f, 2.75f, -1.25f);
+            private const string IniFileName = Plugin.ResourcesFolder + "heli_cam_offsets.ini";
+
+            private static HeliCamOffsetsDictionary instance;
+            public static HeliCamOffsetsDictionary Instance
+            {
+                get
+                {
+                    if (instance == null)
+                        instance = new HeliCamOffsetsDictionary();
+                    return instance;
+                }
+            }
+
+            private Dictionary<Model, Vector3> internalDictionary;
+
+            public Vector3 this[Model model]
+            {
+                get
+                {
+                    if(internalDictionary.TryGetValue(model, out Vector3 offset))
+                    {
+                        return offset;
+                    }
+
+                    return DefaultOffset;
+                }
+            }
+
+
+            private HeliCamOffsetsDictionary()
+            {
+                if (!File.Exists(IniFileName))
+                {
+                    Game.LogTrivial($"The .ini file '{IniFileName}' doesn't exist, creating default...");
+                    CreateDefault();
+                }
+
+                internalDictionary = new Dictionary<Model, Vector3>();
+
+                InitializationFile iniFile = new InitializationFile(IniFileName);
+
+                foreach (string section in iniFile.GetSectionNames())
+                {
+                    float x = 0.0f, y = 0.0f, z = 0.0f;
+
+                    bool success = false;
+                    System.Exception exc = null;
+                    try
+                    {
+                        if (iniFile.DoesSectionExist(section))
+                        {
+                            if (iniFile.DoesKeyExist(section, "X") &&
+                                iniFile.DoesKeyExist(section, "Y") &&
+                                iniFile.DoesKeyExist(section, "Z"))
+                            {
+
+                                x = iniFile.ReadSingle(section, "X", -0.8f);
+                                y = iniFile.ReadSingle(section, "Y", 1.17f);
+                                z = iniFile.ReadSingle(section, "Z", 0.52f);
+
+                                Game.LogTrivial($"HeliCam - Offset found and loaded for vehicle model: {section}");
+                                success = true;
+                            }
+                        }
+
+                    }
+                    catch (System.Exception ex)
+                    {
+                        exc = ex;
+                    }
+
+                    if (!success)
+                    {
+                        Game.LogTrivial($"  <WARNING> HeliCam - Failed to load offset for vehicle model: {section}");
+                        if (exc != null)
+                        {
+                            Game.LogTrivial($"  <WARNING> {exc}");
+                        }
+                        Game.LogTrivial("       Using default settings");
+                        x = DefaultOffset.X;
+                        y = DefaultOffset.Y;
+                        z = DefaultOffset.Z;
+                    }
+
+                    internalDictionary.Add(section, new Vector3(x, y, z));
+                }
+            }
+
+            private void CreateDefault()
+            {
+                Dictionary<string, Vector3> defaultDict = new Dictionary<string, Vector3>()
+                {
+                    { "valkyrie", new Vector3(0.0f, 3.615f, -1.15f) },
+                    { "valkyrie2", new Vector3(0.0f, 3.615f, -1.15f) },
+                    { "polmav", new Vector3(0.0f, 2.75f, -1.25f) },
+                    { "maverick", new Vector3(0.0f, 3.5f, -0.9225f) },
+                    { "savage", new Vector3(0.0f, 5.475f, -0.84115f) },
+                    { "buzzard", new Vector3(0.0f, 1.958f, -0.75f) },
+                    { "buzzard2", new Vector3(0.0f, 1.958f, -0.75f) },
+                    { "cargobob", new Vector3(-0.58225f, 7.15f, -0.95f) },
+                    { "cargobob3", new Vector3(-0.58225f, 7.15f, -0.95f) },
+                    { "cargobob4", new Vector3(-0.58225f, 7.15f, -0.95f) },
+                    { "cargobob2", new Vector3(0.0f, 6.9625f, -1.0f) },
+                    { "frogger", new Vector3(0.0f, 3.25f, -0.5975f) },
+                    { "frogger2", new Vector3(0.0f, 3.25f, -0.5975f) },
+                    { "annihilator", new Vector3(-0.5715f, 4.0f, -0.686875f) },
+                    { "skylift", new Vector3(0.0f, 4.8385f, -2.275f) },
+                    { "swift", new Vector3(0.0f, 4.765f, -0.6f) },
+                    { "swift2", new Vector3(0.0f, 4.765f, -0.6f) },
+                    { "supervolito", new Vector3(0.0f, 3.145f, -0.9675f) },
+                    { "supervolito2", new Vector3(0.0f, 3.145f, -0.9675f) },
+                };
+
+                using (StreamWriter writer = new StreamWriter(IniFileName, false))
+                {
+                    foreach (KeyValuePair<string, Vector3> item in defaultDict)
+                    {
+                        writer.WriteLine($"[{item.Key}]");
+                        writer.WriteLine($"X={item.Value.X.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+                        writer.WriteLine($"Y={item.Value.Y.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+                        writer.WriteLine($"Z={item.Value.Z.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+                    }
+                }
+            }
         }
     }
 }

@@ -1,6 +1,8 @@
 ﻿namespace SuperSight
 {
-    internal interface ISight
+    using System;
+
+    internal interface ISight : IDisposable
     {
         bool IsActive { get; set; }
         bool MustBeActivated { get; }

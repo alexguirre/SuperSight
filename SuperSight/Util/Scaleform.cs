@@ -1,7 +1,6 @@
 ﻿namespace SuperSight.Util
 {
     using System;
-    using System.Drawing;
 
     using Rage;
     using Rage.Native;
@@ -24,7 +23,7 @@
 
         public bool Load(string scaleformID)
         {
-            int handle = NativeFunction.CallByName<int>("REQUEST_SCALEFORM_MOVIE", scaleformID);
+            int handle = NativeFunction.Natives.RequestScaleformMovie<int>(scaleformID);
 
             if (handle == 0) return false;
 
@@ -37,13 +36,12 @@
 
         public void Render2D()
         {
-            const ulong DrawScaleformMovieDefault = 0x0df606929c105be1;
-            NativeFunction.CallByHash<uint>(DrawScaleformMovieDefault, this.Handle, 255, 255, 255, 255);
+            NativeFunction.Natives.x0df606929c105be1(this.Handle, 255, 255, 255, 255);
         }
 
         public void Dispose()
         {
-            NativeFunction.Natives.SET_SCALEFORM_MOVIE_AS_NO_LONGER_NEEDED(ref handle);
+            NativeFunction.Natives.SetScaleformMovieAsNoLongerNeeded(ref handle);
         }
 
         public void CallFunction(string function, params object[] arguments)

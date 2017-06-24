@@ -13,6 +13,4 @@ using System.Runtime.InteropServices;
 [assembly: Guid("e21c5243-ac79-42b6-8541-53666c6e1636")]
 [assembly: AssemblyVersion("1.0.0.*")]
 [assembly: AssemblyFileVersion("1.0.0.0")]
-#if NO_LSPDFR
-[assembly: Rage.Attributes.Plugin("SuperSight", Author = "alexguirre")]
-#endif
+[assembly: Rage.Attributes.Plugin(SuperSight.Plugin.PluginName, Author = "alexguirre", PrefersSingleInstance = true)]
